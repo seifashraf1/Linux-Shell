@@ -2,6 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <errno.h>
+#include <assert.h>
+#include <fcntl.h>
+#include <ctype.h>
 
 #define BUFFER_LEN 1024
 
@@ -44,8 +50,39 @@ void set_program_path (char * path, char * bin, char * prog) {
 	if(path[i]=='\n') path[i]='\0';
 }
 
-/*int commandType (char* cmd, )*/
+/*this functions takes the command and returns*/
+/*2: if input redirection*/
+/*3: if output redirection*/
+/*1: if both*/
+/*4: if pipes*/
+/*5: if neither (Simple command)*/
+int commandType (char* cmd) {
+	char *i = strstr(cmd, "<");
+	char *o = strstr(cmd, ">");
+	char *p = strstr(cmd, "|");
 
+	if (i != NULL && o != NULL) return 1;
+	else if (i != NULL) return 2; /*input redir*/
+	else if (o != NULL) return 3; /*output redir*/
+	else if (p != NULL) return 4;
+	else return 5;		/*neither*/ 
+}
+
+void handleRedirection (char* cmd, int type) {
+		/*int fd;
+				char* filename = argv[2];
+				if((fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC, 0644)) < 0){
+			      perror("open error");
+			return -1;
+		}
+
+		dup2(fd, 1);
+		close(fd);*/
+}
+
+void handlePipes (char* cmd) {
+
+}
 
 
 int main(){
@@ -67,20 +104,37 @@ int main(){
 		
 		argc = build_args (line,argv); /*build program argument*/
 		set_program_path (path,bin,argv[0]); /*set program full path*/
+
+		if (strcmp(argv[0], "cd") == 0) {	/*cd*/
+				chdir(argv[1]);
+		} 
+
+		if (strcmp(argv[0], "hello") == 0) {
+				char *name = getenv("USER");
+				printf("%s\n", name);
+		}
 		
 		int pid= fork(); /*fork child*/
 		
 		if(pid==0){      /*Child*/
-			execve(path,argv,0); /*if failed process is not replaced*/
+			execve(path,argv,0); /*if failed process is not replaced	
 			/*then print error message*/
-			
-			if (strcmp(argv[0], "cd") == 0) {
-				chdir(argv[1]);
-			} else if (strcmp(argv[0], "hello") == 0) {
-				char *name = getenv("USER");
-				printf("%s\n", name);
-			}
 
+			int type = commandType(argv[0]);
+			
+
+			if (type == 5) {
+				execvp(argv[0], argv);
+        		perror("execvp error");
+        		_exit(EXIT_FAILURE);
+
+			} else if (type == 4) {
+				handlePipes(argv[0]);
+
+			} else {
+				handleRedirection(argv[0], type);
+			}
+			 
 			fprintf(stderr, "Child process could not do execve\n");
 		
 		} else wait(NULL); /*Parent*/
