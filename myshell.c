@@ -55,29 +55,59 @@ void set_program_path (char * path, char * bin, char * prog) {
 /*3: if output redirection*/
 /*1: if both*/
 /*4: if pipes*/
-/*5: if neither (Simple command)*/
+/*5: if vars set*/
+/*6: if neither (Simple command)*/
 int commandType (char* cmd) {
 	char *i = strstr(cmd, "<");
 	char *o = strstr(cmd, ">");
 	char *p = strstr(cmd, "|");
+	char *v = strstr(cmd, "=");
 
 	if (i != NULL && o != NULL) return 1;
 	else if (i != NULL) return 2; /*input redir*/
 	else if (o != NULL) return 3; /*output redir*/
 	else if (p != NULL) return 4;
-	else return 5;		/*neither*/ 
+	else if (v != NULL) return 5;
+	else return 6;		/*neither*/ 
 }
 
-void handleRedirection (char* cmd, int type) {
-		/*int fd;
-				char* filename = argv[2];
-				if((fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC, 0644)) < 0){
-			      perror("open error");
-			return -1;
+void handleRedirection (char** argv, int type) {
+	
+	if (type==1) {
+		
+	
+	} else if (type==2) {
+		int fd;
+		char* temp = strtok(argv[0], "<");
+		char* filename = strtok(NULL, " ");
+		if((fd = open(filename, O_RDONLY, 0644)) < 0){
+			perror("open error");
+			return;
+		}
+
+		dup2(fd, 0);
+		close(fd);
+		char *cmd = strtok(argv[0], "<");
+		execvp(cmd, argv);
+		perror("execvp error");
+		_exit(EXIT_FAILURE); 
+
+	} else if (type==3) {
+		int fd;
+		char* temp = strtok(argv[0], ">");
+		char* filename = strtok(NULL, " ");
+		if((fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC, 0644)) < 0){
+			perror("open error");
+			return;
 		}
 
 		dup2(fd, 1);
-		close(fd);*/
+		close(fd);
+		char *cmd = strtok(argv[0], ">");
+		execvp(cmd, argv);
+		perror("execvp error");
+		_exit(EXIT_FAILURE); 
+	}
 }
 
 void handlePipes (char* cmd) {
@@ -107,11 +137,39 @@ int main(){
 
 		if (strcmp(argv[0], "cd") == 0) {	/*cd*/
 				chdir(argv[1]);
+				continue;
 		} 
 
-		if (strcmp(argv[0], "hello") == 0) {
+		if (strcmp(argv[0], "whoami") == 0) {
 				char *name = getenv("USER");
 				printf("%s\n", name);
+				continue;
+		}
+
+		if (strcmp(argv[0], "echo") == 0) { 
+			char *var = argv[1]; 
+			char *v = getenv(var+1); 
+			printf("%s\n", v); 
+			continue;
+
+
+		}
+		
+		int type = commandType(argv[0]);
+		printf("%d\n", type);
+
+		if (type == 5) {
+			char *var = strtok(argv[0], "=");
+			char *val = strtok(NULL, "\0");
+			/*TODO*/
+			/*handle ` `
+			 handle x=$y
+			 notes:
+			 two conditions: found ` -> take whats inside and see a syscall for it to get
+			 					not found -> as normal
+			 */
+			setenv(var, val, 1);
+			continue;
 		}
 		
 		int pid= fork(); /*fork child*/
@@ -119,11 +177,9 @@ int main(){
 		if(pid==0){      /*Child*/
 			execve(path,argv,0); /*if failed process is not replaced	
 			/*then print error message*/
-
-			int type = commandType(argv[0]);
 			
 
-			if (type == 5) {
+			if (type == 7) {
 				execvp(argv[0], argv);
         		perror("execvp error");
         		_exit(EXIT_FAILURE);
@@ -131,13 +187,16 @@ int main(){
 			} else if (type == 4) {
 				handlePipes(argv[0]);
 
-			} else {
-				handleRedirection(argv[0], type);
-			}
+			} else if (type == 3) {
+				handleRedirection(argv, type);
+			
+			} else if (type == 2) {
+				handleRedirection(argv, type);
+			} 
 			 
 			fprintf(stderr, "Child process could not do execve\n");
 		
-		} else wait(NULL); /*Parent*/
+		} else wait(NULL); /*Parent waits for child to die*/
 	}
 
 	return 0;
