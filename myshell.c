@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <glob.h>
 
 #define BUFFER_LEN 1024
 
@@ -146,6 +147,34 @@ int main(){
 				continue;
 		}
 
+		if (strchr(argv[argc-1], '*') != NULL) { 
+			glob_t buffer;
+			const char * pattern = argv[argc-1];
+			int i;
+			int files_count; 
+
+			glob( pattern , 0 , NULL , &buffer ); 
+
+			files_count = buffer.gl_pathc;
+
+			for (i=0; i < files_count; i++) {
+				int glob_pid= fork();
+				
+				if(glob_pid==0){
+					argv[argc-1] = buffer.gl_pathv[i];
+					execvp(argv[0], argv); 
+			    	/*printf("%s \n",buffer.gl_pathv[i]);*/
+			   		globfree(&buffer);
+				
+			} else wait(NULL);
+
+		}
+
+			
+			continue;
+
+		}
+		
 		if (strcmp(argv[0], "echo") == 0) { 
 			char *var = argv[1]; 
 			char *v = getenv(var+1); 
@@ -154,7 +183,7 @@ int main(){
 
 
 		}
-		
+
 		int type = commandType(argv[0]);
 		printf("%d\n", type);
 
@@ -165,7 +194,7 @@ int main(){
 			/*handle ` `
 			 handle x=$y
 			 notes:
-			 two conditions: found ` -> take whats inside and see a syscall for it to get
+			 two conditions: found ` ` -> take whats inside and see a syscall for it to get
 			 					not found -> as normal
 			 */
 			setenv(var, val, 1);
