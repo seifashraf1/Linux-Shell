@@ -59,28 +59,24 @@ void set_program_path (char * path, char * bin, char * prog) {
 /*5: if vars set*/
 /*6: if neither (Simple command)*/
 int commandType (char* cmd) {
-	char *i = strstr(cmd, "<");
-	char *o = strstr(cmd, ">");
-	char *p = strstr(cmd, "|");
-	char *v = strstr(cmd, "=");
+	char *i = strchr(cmd, '<');
+	char *o = strchr(cmd, '>');
+	char *p = strchr(cmd, '|');
+	char *v = strchr(cmd, '=');
 
 	if (i != NULL && o != NULL) return 1;
-	else if (i != NULL) return 2; /*input redir*/
-	else if (o != NULL) return 3; /*output redir*/
-	else if (p != NULL) return 4;
+	else if (i != NULL || o != NULL) return 2; /*redirection*/
+	else if (p != NULL) return 3; /*pipelining*/
+	else if ((i != NULL || o != NULL) && (p != NULL)) return 4;
 	else if (v != NULL) return 5;
 	else return 6;		/*neither*/ 
 }
 
-void handleRedirection (char** argv, int type) {
+void handleRedirection (char *filename, int input) {
+
 	
-	if (type==1) {
-		
-	
-	} else if (type==2) {
+	if (input) {
 		int fd;
-		char* temp = strtok(argv[0], "<");
-		char* filename = strtok(NULL, " ");
 		if((fd = open(filename, O_RDONLY, 0644)) < 0){
 			perror("open error");
 			return;
@@ -88,31 +84,59 @@ void handleRedirection (char** argv, int type) {
 
 		dup2(fd, 0);
 		close(fd);
-		char *cmd = strtok(argv[0], "<");
-		execvp(cmd, argv);
-		perror("execvp error");
-		_exit(EXIT_FAILURE); 
 
-	} else if (type==3) {
+	} else  {
 		int fd;
-		char* temp = strtok(argv[0], ">");
-		char* filename = strtok(NULL, " ");
 		if((fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC, 0644)) < 0){
 			perror("open error");
 			return;
 		}
-
+		
 		dup2(fd, 1);
 		close(fd);
-		char *cmd = strtok(argv[0], ">");
-		execvp(cmd, argv);
-		perror("execvp error");
-		_exit(EXIT_FAILURE); 
 	}
+
 }
 
-void handlePipes (char* cmd) {
+void handleMultiRedirections () {
 
+}
+
+void handlePipes (char* cmd1, char* cmd2, char** argv) {
+	int fd[2];
+
+	if(pipe(fd)==-1) {
+		printf("ERROR: Pipe cannot be created!\n");
+		return;
+	}
+
+	int pid1 = fork();
+
+	if (pid1 == 0) {
+		/*child process 1 (cmd 1)*/
+		dup2(fd[1], 1);
+		close(fd[0]);
+		close(fd[1]);
+		execve("ps -ef", argv, 0);
+	} else if (pid1 < 0) {
+		printf("ERROR: process 1 failed!\n");
+	}
+
+	int pid2 = fork();
+
+	if (pid2 == 0) {
+		/*child process 2 (cmd 2)*/
+		dup2(fd[0], 0);
+		close(fd[0]);
+		close(fd[1]);
+		execve("gerp bash", argv, 0);
+	} else if (pid2 < 0) {
+		printf("ERROR: process 2 failed!\n");
+	}
+
+
+	waitpid(pid1, NULL, 0);
+	waitpid(pid2, NULL, 0);
 }
 
 
@@ -123,6 +147,7 @@ int main(){
 	char* bin="/bin/";/*set path at bin*/
 	char path[1024];/*full file path*/
 	int argc;/*arg count*/
+	char lineCP [BUFFER_LEN];
 
 	while (1) {
 
@@ -132,6 +157,9 @@ int main(){
 			{printf("\n"); break;} /*CRTL+D pressed*/
 		
 		if (strcmp(line, "exit") == 0) break; /*exit*/
+		
+		int type = commandType(line);
+		strcpy(lineCP, line);
 		
 		argc = build_args (line,argv); /*build program argument*/
 		set_program_path (path,bin,argv[0]); /*set program full path*/
@@ -184,9 +212,6 @@ int main(){
 
 		}
 
-		int type = commandType(argv[0]);
-		printf("%d\n", type);
-
 		if (type == 5) {
 			char *var = strtok(argv[0], "=");
 			char *val = strtok(NULL, "\0");
@@ -201,28 +226,77 @@ int main(){
 			continue;
 		}
 		
+		printf("%d\n", type);
+
+		
 		int pid= fork(); /*fork child*/
 		
 		if(pid==0){      /*Child*/
-			execve(path,argv,0); /*if failed process is not replaced	
-			/*then print error message*/
+
 			
+			if (type == 1) {
+				handleMultiRedirections (argv[0]);
 
-			if (type == 7) {
-				execvp(argv[0], argv);
-        		perror("execvp error");
-        		_exit(EXIT_FAILURE);
-
-			} else if (type == 4) {
-				handlePipes(argv[0]);
-
-			} else if (type == 3) {
-				handleRedirection(argv, type);
-			
 			} else if (type == 2) {
-				handleRedirection(argv, type);
-			} 
-			 
+				int input = 1;
+
+				if (strcmp(argv[argc-1], ">") == 0) input = 0;
+
+				if (input) {
+					char *cmd = strtok(lineCP, "<"); 
+				} else {
+					char *cmd = strtok(lineCP, ">");
+				}
+				char *filename = strtok (NULL, " ");
+
+				handleRedirection(filename, input);
+				argv[argc-2] = NULL;
+				
+			} else if (type == 3) {
+				/*char* cmd1 = strtok(lineCP, "|");
+				char* cmd2 = strtok(NULL, "\0");
+				printf("%s\n", cmd1);
+				printf("%s\n", cmd2);
+				handlePipes(cmd1, cmd2, argv);
+				continue;*/
+
+				int fd[2];
+
+				if(pipe(fd)==-1) {
+					printf("ERROR: Pipe cannot be created!\n");
+					return;
+				}
+
+				int pid1 = fork();
+
+				if (pid1 == 0) {
+					/*child process 1 (cmd 1)*/
+					dup2(fd[1], 1);
+					close(fd[1]);
+					execve(path, argv, 0);
+				} else if (pid1 < 0) {
+					printf("ERROR: process 1 failed!\n");
+				}
+
+				int pid2 = fork();
+
+				if (pid2 == 0) {
+					/*child process 2 (cmd 2)*/
+					dup2(fd[0], 0);
+					close(fd[0]);
+					execve(path, argv, 0);
+				} else if (pid2 < 0) {
+					printf("ERROR: process 2 failed!\n");
+				}
+
+
+				waitpid(pid1, NULL, 0);
+				waitpid(pid2, NULL, 0);
+
+				continue;
+			}
+
+			execve(path,argv,0); /*if failed process is not replaced then print error message*/
 			fprintf(stderr, "Child process could not do execve\n");
 		
 		} else wait(NULL); /*Parent waits for child to die*/
