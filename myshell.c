@@ -64,7 +64,7 @@ int commandType (char* cmd) {
 	char *p = strchr(cmd, '|');
 	char *v = strchr(cmd, '=');
 
-	if (i != NULL && o != NULL) return 1;
+	if (i != NULL && o != NULL && p == NULL) return 1;
 	else if (i != NULL || o != NULL) return 2; /*redirection*/
 	else if (p != NULL) return 3; /*pipelining*/
 	else if ((i != NULL || o != NULL) && (p != NULL)) return 4;
@@ -98,7 +98,147 @@ void handleRedirection (char *filename, int input) {
 
 }
 
-void handleMultiPipes () {
+void handleMultiRedirections (char* inputfile, char* outputfile) {
+
+		int fd;
+		if((fd = open(inputfile, O_RDONLY, 0644)) < 0){
+			perror("open error");
+			return;
+		}
+
+		dup2(fd, 0);
+		close(fd);
+
+		int fd2;
+		if((fd2 = open(outputfile, O_CREAT | O_WRONLY | O_TRUNC, 0644)) < 0){
+			perror("open error");
+			return;
+		}
+		
+		dup2(fd2, 1);
+		close(fd2);
+
+
+}
+
+int countCMD (char* cmd, char** simpleCommands){
+    char* command = strtok(cmd, "|");
+    int i=0;
+    while(command!=NULL){
+        simpleCommands[i]=command;
+        command = strtok(NULL,"|"); 
+        i++; 
+    }
+    simpleCommands[i]=NULL; 
+    return i; 
+}
+
+void handleMultiPipes (char* line) {
+	int stdin = dup(0);
+	int stdout = dup(1);
+
+	char* argv[100];/*user command*/
+	char* bin="/bin/";/*set path at bin*/
+	char path[1024];/*full file path*/
+	int argc;/*arg count*/
+	char lineCP [BUFFER_LEN];
+	strcpy(lineCP, line);
+	argc = build_args (line,argv); /*build program argument*/
+	set_program_path (path,bin,argv[0]); /*set program full path*/
+
+	char *iflg = strchr(lineCP, '<');
+	int fdi;
+
+	/*if (iflg != NULL) {
+		if((fdi = open(argv[argc-1], O_RDONLY, 0644)) < 0){
+			perror("open error");
+			return;
+		}
+		argv[argc-2] = NULL;
+	} else {
+		fdi=dup(stdin);
+	}*/
+
+	fdi=dup(stdin);
+	char* simpleCommands[100];
+	int cmdNum = countCMD(lineCP, simpleCommands);
+	printf("num:%d\n", cmdNum);
+	int pid;
+	int fdo;
+	int i=0;
+
+
+	for (i=0; i<cmdNum; i++) {
+		char* argv2[100];/*user command*/
+		char* bin2="/bin/";/*set path at bin*/
+		char path2[1024];/*full file path*/
+		int argc2;/*arg count*/
+		char lineCP2 [BUFFER_LEN];
+		strcpy(lineCP2, simpleCommands[i]);
+		argc = build_args (simpleCommands[i],argv2); /*build program argument*/
+		set_program_path (path2,bin2,argv2[0]);
+
+		dup2(fdi, 0);
+		close(fdi);
+	
+	if (i==cmdNum-1) {
+		/*char *oflg = strchr(lineCP2, '>');
+		if (oflg != NULL) {
+		if((fdo = open(argv2[2], O_CREAT | O_WRONLY | O_TRUNC, 0644)) < 0){
+			printf("%s\n", argv2[2]);
+			perror("open error");
+			return;
+		}
+
+			argv2[1] = NULL;
+		} else {
+			fdo=dup(stdout);
+		}*/ 
+
+		fdo=dup(stdout);
+	} else {
+
+		int fdPipe[2];
+		pipe(fdPipe);
+
+		fdo=fdPipe[1];
+		fdi=fdPipe[0];
+	} 
+
+		dup2(fdo, 1);
+		close(fdo);
+
+		pid=fork();
+
+		if (pid==0) {
+			/*int input = 1;
+
+			if (strcmp(argv2[1], ">") == 0) input = 0;
+
+			if (input) {
+				char *cmd = strtok(lineCP2, "<");
+				char *filename = strtok (NULL, " ");
+				/*handleRedirection(filename, input);
+				argv2[1] = NULL; 
+
+			} else if (!input) {
+				char *cmd = strtok(lineCP2, ">");
+				char *filename = strtok (NULL, " ");
+				/*handleRedirection(filename, input);
+				argv2[1] = NULL;
+
+			} 	*/	
+			execve(path2, argv2, 0);
+		}
+
+	}
+
+		dup2(stdin, 0);
+		dup2(stdout, 1);
+		close(stdin);
+		close(stdout);
+
+		wait(NULL);
 	
 }
 
@@ -244,12 +384,11 @@ int main(){
 		
 		if(pid==0){      /*Child*/
 
-			if (type == 1) {
-
-
+			if (type == 4) {
+				printf("sdsada\n");
+				handleMultiPipes(lineCP);
+				continue;
 				
-			
-
 			} else if (type == 2) {
 				int input = 1;
 
@@ -275,6 +414,18 @@ int main(){
 
 				continue;
 				
+			} else if (type==1) {
+				char *cmd = strtok(lineCP, "<"); 
+				char *inputfile = strtok (NULL, ">");
+				char *outputfile = strtok (NULL, " ");
+				memmove(inputfile, inputfile+1, strlen(inputfile));
+				handleMultiRedirections(inputfile, outputfile);
+				printf("%s\n", inputfile);
+				printf("%s\n", outputfile);
+				argv[1] = NULL;
+				execvp(argv[0], argv);
+				continue;
+
 			}
 
 			execve(path,argv,0); /*if failed process is not replaced then print error message*/
