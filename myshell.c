@@ -98,13 +98,13 @@ void handleRedirection (char *filename, int input) {
 
 }
 
-void handleMultiRedirections () {
-
+void handleMultiPipes () {
+	
 }
 
 void handlePipes (char* cmd1, char* cmd2, char** argv) {
 	int fd[2];
-
+	int status;
 	if(pipe(fd)==-1) {
 		printf("ERROR: Pipe cannot be created!\n");
 		return;
@@ -115,9 +115,14 @@ void handlePipes (char* cmd1, char* cmd2, char** argv) {
 	if (pid1 == 0) {
 		/*child process 1 (cmd 1)*/
 		dup2(fd[1], 1);
-		close(fd[0]);
 		close(fd[1]);
-		execve("ps -ef", argv, 0);
+		char* argv[100];/*user command*/
+		char* bin="/bin/";/*set path at bin*/
+		char path[1024];/*full file path*/
+		int argc;/*arg count*/
+		argc = build_args (cmd1,argv); /*build program argument*/
+		set_program_path (path,bin,argv[0]); /*set program full path*/
+		execve(path, argv, 0);
 	} else if (pid1 < 0) {
 		printf("ERROR: process 1 failed!\n");
 	}
@@ -129,14 +134,20 @@ void handlePipes (char* cmd1, char* cmd2, char** argv) {
 		dup2(fd[0], 0);
 		close(fd[0]);
 		close(fd[1]);
-		execve("gerp bash", argv, 0);
+		char* argv[100];/*user command*/
+		char* bin="/bin/";/*set path at bin*/
+		char path[1024];/*full file path*/
+		int argc;/*arg count*/
+		argc = build_args (cmd2,argv); /*build program argument*/
+		set_program_path (path,bin,argv[0]); /*set program full path*/
+		execve(path, argv, 0);
 	} else if (pid2 < 0) {
 		printf("ERROR: process 2 failed!\n");
 	}
 
+	wait(NULL);
 
-	waitpid(pid1, NULL, 0);
-	waitpid(pid2, NULL, 0);
+	
 }
 
 
@@ -233,9 +244,11 @@ int main(){
 		
 		if(pid==0){      /*Child*/
 
-			
 			if (type == 1) {
-				handleMultiRedirections (argv[0]);
+
+
+				
+			
 
 			} else if (type == 2) {
 				int input = 1;
@@ -253,47 +266,15 @@ int main(){
 				argv[argc-2] = NULL;
 				
 			} else if (type == 3) {
-				/*char* cmd1 = strtok(lineCP, "|");
+				char* cmd1 = strtok(lineCP, "|");
 				char* cmd2 = strtok(NULL, "\0");
-				printf("%s\n", cmd1);
-				printf("%s\n", cmd2);
+
+				/*memmove(cmd2, cmd2+1, strlen(cmd2));*/
+
 				handlePipes(cmd1, cmd2, argv);
-				continue;*/
-
-				int fd[2];
-
-				if(pipe(fd)==-1) {
-					printf("ERROR: Pipe cannot be created!\n");
-					return;
-				}
-
-				int pid1 = fork();
-
-				if (pid1 == 0) {
-					/*child process 1 (cmd 1)*/
-					dup2(fd[1], 1);
-					close(fd[1]);
-					execve(path, argv, 0);
-				} else if (pid1 < 0) {
-					printf("ERROR: process 1 failed!\n");
-				}
-
-				int pid2 = fork();
-
-				if (pid2 == 0) {
-					/*child process 2 (cmd 2)*/
-					dup2(fd[0], 0);
-					close(fd[0]);
-					execve(path, argv, 0);
-				} else if (pid2 < 0) {
-					printf("ERROR: process 2 failed!\n");
-				}
-
-
-				waitpid(pid1, NULL, 0);
-				waitpid(pid2, NULL, 0);
 
 				continue;
+				
 			}
 
 			execve(path,argv,0); /*if failed process is not replaced then print error message*/
