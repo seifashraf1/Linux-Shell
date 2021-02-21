@@ -437,15 +437,21 @@ int main(){
 
 			} else {
 				char *var = strtok(argv[0], "=");
-				char *val = strtok(NULL, "\0");
-				/*TODO*/
-				/*handle ` `
-				 handle x=$y
-				 notes:
-				 two conditions: found ` ` -> take whats inside and see a syscall for it to get
-				 					not found -> as normal
-				 */
-				setenv(var, val, 1);
+				char *val = strtok(NULL, " ");
+				
+				char *var2 = strchr(val, '$');
+
+				if (var2 != NULL){
+					memmove(val, val+1, strlen(val));
+					/*char* tmp = strtok(NULL, " ");
+					char* val2 = strtok(NULL, " ");
+					char *val3 = getenv(val2); */
+					char *v = getenv(val); 
+					setenv(var, v, 1);
+				} else {
+					setenv(var, val, 1);
+				}
+				
 			}
 			
 			
