@@ -101,7 +101,10 @@ void handleRedirection (char *filename, int input) {
 void handleMultiRedirections (char* inputfile, char* outputfile) {
 
 		int fd;
+		inputfile[strlen(inputfile)-1] = '\0';
+		
 		if((fd = open(inputfile, O_RDONLY, 0644)) < 0){
+			printf("fd:%d\n", fd);
 			perror("open error");
 			return;
 		}
@@ -111,6 +114,7 @@ void handleMultiRedirections (char* inputfile, char* outputfile) {
 
 		int fd2;
 		if((fd2 = open(outputfile, O_CREAT | O_WRONLY | O_TRUNC, 0644)) < 0){
+			printf("fd2:%d\n", fd2);
 			perror("open error");
 			return;
 		}
@@ -141,28 +145,44 @@ void handleMultiPipes (char* line) {
 	char* bin="/bin/";/*set path at bin*/
 	char path[1024];/*full file path*/
 	int argc;/*arg count*/
-	char lineCP [BUFFER_LEN];
+
+	char lineCP [BUFFER_LEN];		/*to get simple commands*/
 	strcpy(lineCP, line);
+
+	char iline [BUFFER_LEN];		/*to parse input file*/
+	strcpy(iline, line);
+
+	char oline [BUFFER_LEN];		/*to parse output file*/
+	strcpy(oline, line);
+	
 	argc = build_args (line,argv); /*build program argument*/
 	set_program_path (path,bin,argv[0]); /*set program full path*/
 
-	char *iflg = strchr(lineCP, '<');
+
+	char* simpleCommands[100];
+	int cmdNum = 0;
+	cmdNum = countCMD(lineCP, simpleCommands);
+	printf("num:%d\n", cmdNum);
+
+	/*parsing input files if any, and redirects*/
+	char *iflg = strchr(iline, '<');
 	int fdi;
 
-	/*if (iflg != NULL) {
-		if((fdi = open(argv[argc-1], O_RDONLY, 0644)) < 0){
+	if (iflg != NULL) {
+		char* inputfile = strtok(iflg+1, ">");
+		memmove(inputfile, inputfile+1, strlen(inputfile));
+		inputfile[strlen(inputfile)-1]='\0';
+		
+		if((fdi = open(inputfile, O_RDONLY, 0644)) < 0){
 			perror("open error");
 			return;
 		}
-		argv[argc-2] = NULL;
+			
 	} else {
 		fdi=dup(stdin);
-	}*/
+	}
 
-	fdi=dup(stdin);
-	char* simpleCommands[100];
-	int cmdNum = countCMD(lineCP, simpleCommands);
-	printf("num:%d\n", cmdNum);
+	
 	int pid;
 	int fdo;
 	int i=0;
@@ -173,29 +193,35 @@ void handleMultiPipes (char* line) {
 		char* bin2="/bin/";/*set path at bin*/
 		char path2[1024];/*full file path*/
 		int argc2;/*arg count*/
+		
 		char lineCP2 [BUFFER_LEN];
 		strcpy(lineCP2, simpleCommands[i]);
+		
 		argc = build_args (simpleCommands[i],argv2); /*build program argument*/
 		set_program_path (path2,bin2,argv2[0]);
 
 		dup2(fdi, 0);
 		close(fdi);
-	
-	if (i==cmdNum-1) {
-		/*char *oflg = strchr(lineCP2, '>');
-		if (oflg != NULL) {
-		if((fdo = open(argv2[2], O_CREAT | O_WRONLY | O_TRUNC, 0644)) < 0){
-			printf("%s\n", argv2[2]);
-			perror("open error");
-			return;
-		}
+		
+		printf("%s\n", oline);
+		printf("%s\n", simpleCommands[i]);
 
-			argv2[1] = NULL;
+	if (i==cmdNum-1) {
+		char *oflg = strchr(oline, '>');
+
+		if (oflg != NULL) {
+			char* outputfile = strtok(oflg+1, " ");
+			printf("%s\n", outputfile);
+			
+			if((fdo = open(outputfile, O_CREAT | O_WRONLY | O_TRUNC, 0644)) < 0){
+				perror("open error");
+				return;
+			}
+		
 		} else {
 			fdo=dup(stdout);
-		}*/ 
+		}
 
-		fdo=dup(stdout);
 	} else {
 
 		int fdPipe[2];
@@ -209,6 +235,7 @@ void handleMultiPipes (char* line) {
 		close(fdo);
 
 		pid=fork();
+
 
 		if (pid==0) {
 			/*int input = 1;
@@ -228,6 +255,9 @@ void handleMultiPipes (char* line) {
 				argv2[1] = NULL;
 
 			} 	*/	
+			if (strcmp(argv2[1], ">") == 0 || strcmp(argv2[1], "<") == 0) {
+				argv2[1] = NULL;
+			}
 			execve(path2, argv2, 0);
 		}
 
@@ -244,7 +274,6 @@ void handleMultiPipes (char* line) {
 
 void handlePipes (char* cmd1, char* cmd2, char** argv) {
 	int fd[2];
-	int status;
 	if(pipe(fd)==-1) {
 		printf("ERROR: Pipe cannot be created!\n");
 		return;
@@ -273,7 +302,6 @@ void handlePipes (char* cmd1, char* cmd2, char** argv) {
 		/*child process 2 (cmd 2)*/
 		dup2(fd[0], 0);
 		close(fd[0]);
-		close(fd[1]);
 		char* argv[100];/*user command*/
 		char* bin="/bin/";/*set path at bin*/
 		char path[1024];/*full file path*/
@@ -288,6 +316,38 @@ void handlePipes (char* cmd1, char* cmd2, char** argv) {
 	wait(NULL);
 
 	
+}
+
+void handleTicks (char* var, char* cmd) {
+	int fd[2];
+	if(pipe(fd)==-1) {
+		printf("ERROR: Pipe cannot be created!\n");
+		return;
+	}
+
+	int pid = fork();
+
+	if (pid == 0) {
+		/*child process 1 (cmd 1)*/
+		dup2(fd[1], 1);
+		close(fd[1]);
+		char* argv[100];/*user command*/
+		char* bin="/bin/";/*set path at bin*/
+		char path[1024];/*full file path*/
+		int argc;/*arg count*/
+		argc = build_args (cmd,argv); /*build program argument*/
+		set_program_path (path,bin,argv[0]); /*set program full path*/
+		execve(path, argv, 0);
+	} else if (pid < 0) {
+		printf("ERROR: process 1 failed!\n");
+	}
+
+	char buffer [BUFFER_LEN] = {0};
+
+	read (fd[0], buffer, BUFFER_LEN);
+
+	setenv(var, buffer, 1);
+
 }
 
 
@@ -364,16 +424,31 @@ int main(){
 		}
 
 		if (type == 5) {
-			char *var = strtok(argv[0], "=");
-			char *val = strtok(NULL, "\0");
-			/*TODO*/
-			/*handle ` `
-			 handle x=$y
-			 notes:
-			 two conditions: found ` ` -> take whats inside and see a syscall for it to get
-			 					not found -> as normal
-			 */
-			setenv(var, val, 1);
+
+			char* ftick = strchr(lineCP, '`');
+			char* ltick = strrchr(lineCP, '`');
+
+			if (ftick != NULL && ltick != NULL) {
+				char *var = strtok(lineCP, "=");
+				
+				char* cmd = strtok(NULL, "`");
+				
+				handleTicks(var, cmd);
+
+			} else {
+				char *var = strtok(argv[0], "=");
+				char *val = strtok(NULL, "\0");
+				/*TODO*/
+				/*handle ` `
+				 handle x=$y
+				 notes:
+				 two conditions: found ` ` -> take whats inside and see a syscall for it to get
+				 					not found -> as normal
+				 */
+				setenv(var, val, 1);
+			}
+			
+			
 			continue;
 		}
 		
@@ -384,8 +459,7 @@ int main(){
 		
 		if(pid==0){      /*Child*/
 
-			if (type == 4) {
-				printf("sdsada\n");
+			if (type == 1 || type == 2) {
 				handleMultiPipes(lineCP);
 				continue;
 				
@@ -411,20 +485,17 @@ int main(){
 				/*memmove(cmd2, cmd2+1, strlen(cmd2));*/
 
 				handlePipes(cmd1, cmd2, argv);
-
 				continue;
 				
-			} else if (type==1) {
+			} else if (type==10) {
 				char *cmd = strtok(lineCP, "<"); 
 				char *inputfile = strtok (NULL, ">");
 				char *outputfile = strtok (NULL, " ");
 				memmove(inputfile, inputfile+1, strlen(inputfile));
 				handleMultiRedirections(inputfile, outputfile);
-				printf("%s\n", inputfile);
-				printf("%s\n", outputfile);
 				argv[1] = NULL;
-				execvp(argv[0], argv);
-				continue;
+				/*execvp(argv[0], argv);
+				continue;*/
 
 			}
 
