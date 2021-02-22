@@ -68,12 +68,12 @@ int commandType (char* cmd) {
 int countCMD (char* cmd, char** simpleCommands){
     char* command = strtok(cmd, "|");
     int i=0;
-    while(command!=NULL){
+    while(command != NULL){
         simpleCommands[i]=command;
         command = strtok(NULL,"|"); 
         i++; 
     }
-    simpleCommands[i]=NULL; 
+    simpleCommands[i] =  NULL; 
     return i; 
 }
 
