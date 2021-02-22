@@ -64,17 +64,16 @@ int commandType (char* cmd) {
 	char *p = strchr(cmd, '|');
 	char *v = strchr(cmd, '=');
 
-	if (i != NULL && o != NULL && p == NULL) return 1;
+	if ((i != NULL || o != NULL) && (p != NULL)) return 1;
 	else if (i != NULL || o != NULL) return 2; /*redirection*/
 	else if (p != NULL) return 3; /*pipelining*/
-	else if ((i != NULL || o != NULL) && (p != NULL)) return 4;
+	/*else if ((i != NULL || o != NULL) && (p != NULL)) return 4;*/
 	else if (v != NULL) return 5;
 	else return 6;		/*neither*/ 
 }
 
 void handleRedirection (char *filename, int input) {
 
-	
 	if (input) {
 		int fd;
 		if((fd = open(filename, O_RDONLY, 0644)) < 0){
@@ -465,14 +464,15 @@ int main(){
 		
 		if(pid==0){      /*Child*/
 
-			if (type == 1 || type == 2) {
+			if (type == 1) {
 				handleMultiPipes(lineCP);
 				continue;
 				
 			} else if (type == 2) {
 				int input = 1;
 
-				if (strcmp(argv[argc-1], ">") == 0) input = 0;
+				char* check = strchr(lineCP, '>');
+				if (check != NULL) input = 0;
 
 				if (input) {
 					char *cmd = strtok(lineCP, "<"); 
