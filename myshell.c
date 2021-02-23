@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <glob.h>
+extern char** environ;
 
 #define BUFFER_LEN 1024
 
