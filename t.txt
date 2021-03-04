@@ -1,7 +1,0 @@
-total 36
--rw-r--r-- 1 seif seif  1068 Feb 13 14:49 LICENSE
--rw-r--r-- 1 seif seif    13 Feb 13 14:49 README.md
--rw-rw-r-- 1 seif seif    47 Feb 13 15:33 makefile
--rw-r--r-- 1 seif seif  5080 Feb 19 19:34 myshell.c
--rwxr-xr-x 1 seif seif 13808 Feb 19 19:34 shell
--rw------- 1 seif seif     0 Feb 19 19:35 t.txt
